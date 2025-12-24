@@ -4,7 +4,7 @@ import { PinoLogger } from 'nestjs-pino';
 /**
  * Servicio de logging personalizado
  * Similar a zap o logrus de Go
- * 
+ *
  * Uso:
  * constructor(private readonly logger: LoggerService) {}
  * this.logger.info('Mensaje', { contexto: 'valor' });
@@ -39,16 +39,21 @@ export class LoggerService {
   /**
    * Log de nivel error - errores
    */
-  error(message: string, error?: Error | any, context?: Record<string, any>): void {
+  error(
+    message: string,
+    error?: Error | any,
+    context?: Record<string, any>,
+  ): void {
     const errorContext = {
       ...context,
-      error: error instanceof Error
-        ? {
-            message: error.message,
-            stack: error.stack,
-            name: error.name,
-          }
-        : error,
+      error:
+        error instanceof Error
+          ? {
+              message: error.message,
+              stack: error.stack,
+              name: error.name,
+            }
+          : error,
     };
     this.logger.error(errorContext, message);
   }
@@ -56,16 +61,21 @@ export class LoggerService {
   /**
    * Log de nivel fatal - errores críticos
    */
-  fatal(message: string, error?: Error | any, context?: Record<string, any>): void {
+  fatal(
+    message: string,
+    error?: Error | any,
+    context?: Record<string, any>,
+  ): void {
     const errorContext = {
       ...context,
-      error: error instanceof Error
-        ? {
-            message: error.message,
-            stack: error.stack,
-            name: error.name,
-          }
-        : error,
+      error:
+        error instanceof Error
+          ? {
+              message: error.message,
+              stack: error.stack,
+              name: error.name,
+            }
+          : error,
     };
     this.logger.fatal(errorContext, message);
   }
@@ -77,4 +87,3 @@ export class LoggerService {
     this.logger.setContext(context);
   }
 }
-
