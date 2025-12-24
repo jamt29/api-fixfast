@@ -9,6 +9,7 @@ import { ClientsModule } from './modules/clients/clients.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { LoggerService } from './common/services/logger.service';
+import { MechanicsModule } from './modules/mechanics/mechanics.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { LoggerService } from './common/services/logger.service';
     UsersModule,
     ClientsModule,
     AuthModule,
+    MechanicsModule,
   ],
   controllers: [AppController],
   providers: [AppService, LoggingInterceptor, LoggerService],
