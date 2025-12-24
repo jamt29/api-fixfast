@@ -24,14 +24,24 @@ export type Database = ReturnType<typeof drizzle>;
           throw new Error('DATABASE_URL is not defined');
         }
 
-        const pool = new Pool({
-          connectionString: connectionString,
-          max: 20,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 2000,
-        });
+        try {
+          const pool = new Pool({
+            connectionString: connectionString,
+            max: 20,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 2000,
+          });
 
-        return drizzle(pool, { schema: { ...schema, ...relations } });
+          // Test connection
+          pool.on('error', (err) => {
+            console.error('❌ Unexpected database pool error:', err);
+          });
+
+          return drizzle(pool, { schema: { ...schema, ...relations } });
+        } catch (error) {
+          console.error('❌ Error creating database connection:', error);
+          throw error;
+        }
       },
     },
   ],
