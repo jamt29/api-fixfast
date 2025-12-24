@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { Logger } from 'nestjs-pino';
 
 // Capturar errores no manejados
 process.on('unhandledRejection', (reason, promise) => {
@@ -16,9 +18,15 @@ process.on('uncaughtException', (error) => {
 
 async function bootstrap() {
   try {
-    console.log('🔧 Initializing NestJS application...');
-    const app = await NestFactory.create(AppModule);
-    console.log('✅ App module created');
+    const app = await NestFactory.create(AppModule, {
+      bufferLogs: true,
+    });
+
+    // Usar el logger de Pino
+    const logger = app.get(Logger);
+    app.useLogger(logger);
+
+    logger.log('🔧 Initializing NestJS application...');
 
     // Habilitar validación global
     app.useGlobalPipes(
@@ -28,16 +36,20 @@ async function bootstrap() {
         transform: true,
       }),
     );
-    console.log('✅ Global pipes configured');
+    logger.debug('✅ Global pipes configured');
 
     // Filtro global de excepciones para personalizar respuestas de error
     app.useGlobalFilters(new HttpExceptionFilter());
-    console.log('✅ Global filters configured');
+    logger.debug('✅ Global filters configured');
+
+    // Interceptor global para logging de peticiones
+    app.useGlobalInterceptors(app.get(LoggingInterceptor));
+    logger.debug('✅ Global interceptors configured');
 
     const port = process.env.PORT ?? 3001;
-    console.log(`🌐 Starting server on port ${port}...`);
+    logger.log(`🌐 Starting server on port ${port}...`);
     await app.listen(port);
-    console.log(`🚀 Application is running on: http://localhost:${port}`);
+    logger.log(`🚀 Application is running on: http://localhost:${port}`);
   } catch (error) {
     console.error('❌ Error starting the application:', error);
     if (error instanceof Error) {
