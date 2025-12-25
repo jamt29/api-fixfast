@@ -7,10 +7,11 @@ import {
 import type { Database } from '../../../db/database.module';
 import { DATABASE_CONNECTION } from '../../../db/database.module';
 import { clients } from '../../../db/schema';
-import { and, or, eq, ilike, sql, count } from 'drizzle-orm';
+import { and, or, eq, ilike, sql, count, not } from 'drizzle-orm';
 import { ClientResponseDto } from '../dto/client-response.dto';
 import { CreateClientDto } from '../dto/create.dto';
 import { generateId } from '../../../common/utils/id-generator.util';
+import { handleDatabaseError } from '../../../common/utils/database-error.util';
 
 /**
  * Repository para acceso a datos de clientes
@@ -126,77 +127,110 @@ export class ClientsRepository {
   }
 
   async create(client: CreateClientDto): Promise<ClientResponseDto> {
-    const [newClient] = await this.db
-      .insert(clients)
-      .values({
-        id: generateId(),
-        firstName: client.firstName,
-        lastName: client.lastName,
-        phone: client.phone,
-        email: client.email,
-        address: client.address,
-        dui: client.dui,
-        isActive: client.isActive ?? true,
-      })
-      .returning();
+    try {
+      // Verificar duplicados antes de insertar (validación explícita)
+      const existingClient = await this.db
+        .select()
+        .from(clients)
+        .where(or(eq(clients.email, client.email), eq(clients.dui, client.dui)))
+        .limit(1);
 
-    return {
-      id: newClient.id,
-      name: `${newClient.firstName} ${newClient.lastName}`,
-      phone: newClient.phone ?? '',
-      email: newClient.email ?? '',
-      address: newClient.address ?? '',
-      dui: newClient.dui ?? '',
-      isActive: newClient.isActive ?? false,
-      vehicles: 0,
-      orders: 0,
-      lastVisit: null,
-      createdAt: newClient.createdAt ?? '',
-      updatedAt: newClient.updatedAt ?? '',
-    };
+      if (existingClient.length > 0) {
+        if (existingClient[0].email === client.email) {
+          throw new ConflictException('El email ya está en uso');
+        }
+        if (existingClient[0].dui === client.dui) {
+          throw new ConflictException('El DUI ya está en uso');
+        }
+      }
+
+      const [newClient] = await this.db
+        .insert(clients)
+        .values({
+          id: generateId(),
+          firstName: client.firstName,
+          lastName: client.lastName,
+          phone: client.phone,
+          email: client.email,
+          address: client.address,
+          dui: client.dui,
+          isActive: client.isActive ?? true,
+        })
+        .returning();
+
+      return {
+        id: newClient.id,
+        name: `${newClient.firstName} ${newClient.lastName}`,
+        phone: newClient.phone ?? '',
+        email: newClient.email ?? '',
+        address: newClient.address ?? '',
+        dui: newClient.dui ?? '',
+        isActive: newClient.isActive ?? false,
+        vehicles: 0,
+        orders: 0,
+        lastVisit: null,
+        createdAt: newClient.createdAt ?? '',
+        updatedAt: newClient.updatedAt ?? '',
+      };
+    } catch (error) {
+      // Manejo explícito de errores de base de datos
+      handleDatabaseError(error, 'cliente');
+    }
   }
 
   async update(
     id: string,
     client: CreateClientDto,
   ): Promise<ClientResponseDto> {
-    await this.findById(id);
+    try {
+      // Verificar que el cliente existe
+      await this.findById(id);
 
-    const isDuiInUse = await this.db
-      .select()
-      .from(clients)
-      .where(eq(clients.dui, client.dui))
-      .limit(1);
+      // Verificar duplicados (excluyendo el cliente actual)
+      const isDuiInUse = await this.db
+        .select()
+        .from(clients)
+        .where(and(eq(clients.dui, client.dui), not(eq(clients.id, id))))
+        .limit(1);
 
-    if (isDuiInUse.length > 0) {
-      throw new ConflictException('El DUI ya está en uso'); //!Ver si se pasa a 400
+      if (isDuiInUse.length > 0) {
+        throw new ConflictException('El DUI ya está en uso');
+      }
+
+      const isEmailInUse = await this.db
+        .select()
+        .from(clients)
+        .where(and(eq(clients.email, client.email), not(eq(clients.id, id))))
+        .limit(1);
+
+      if (isEmailInUse.length > 0) {
+        throw new ConflictException('El email ya está en uso');
+      }
+
+      await this.db
+        .update(clients)
+        .set({
+          ...client,
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(clients.id, id));
+
+      const updatedClient = await this.findById(id);
+      return updatedClient;
+    } catch (error) {
+      // Manejo explícito de errores de base de datos
+      handleDatabaseError(error, 'cliente');
     }
-
-    const isEmailInUse = await this.db
-      .select()
-      .from(clients)
-      .where(eq(clients.email, client.email))
-      .limit(1);
-
-    if (isEmailInUse.length > 0) {
-      throw new ConflictException('El email ya está en uso'); //!Ver si se pasa a 400
-    }
-
-    await this.db
-      .update(clients)
-      .set({
-        ...client,
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(clients.id, id));
-
-    const updatedClient = await this.findById(id);
-    return updatedClient;
   }
 
   async remove(id: string): Promise<void> {
-    await this.findById(id);
-    await this.db.delete(clients).where(eq(clients.id, id));
+    try {
+      // Verificar que existe antes de eliminar
+      await this.findById(id);
+      await this.db.delete(clients).where(eq(clients.id, id));
+    } catch (error) {
+      handleDatabaseError(error, 'cliente');
+    }
   }
 
   async findBySearchTerm(term: string): Promise<ClientResponseDto[]> {
@@ -241,8 +275,13 @@ export class ClientsRepository {
   }
 
   async changeStatus(id: string, isActive: boolean): Promise<void> {
-    await this.db.update(clients).set({ isActive }).where(eq(clients.id, id));
-    return;
+    try {
+      // Verificar que existe antes de actualizar
+      await this.findById(id);
+      await this.db.update(clients).set({ isActive }).where(eq(clients.id, id));
+    } catch (error) {
+      handleDatabaseError(error, 'cliente');
+    }
   }
 
   async count(): Promise<number> {
