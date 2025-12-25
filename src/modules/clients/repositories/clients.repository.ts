@@ -12,6 +12,7 @@ import { ClientResponseDto } from '../dto/client-response.dto';
 import { CreateClientDto } from '../dto/create.dto';
 import { generateId } from '../../../common/utils/id-generator.util';
 import { handleDatabaseError } from '../../../common/utils/database-error.util';
+import type { PaginatedResponse } from '../../../common/dto/pagination.dto';
 
 /**
  * Repository para acceso a datos de clientes
@@ -22,12 +23,23 @@ export class ClientsRepository {
   constructor(@Inject(DATABASE_CONNECTION) private readonly db: Database) {}
 
   /**
-   * Busca todos los clientes con información adicional:
+   * Busca todos los clientes con información adicional (paginado):
    * - Conteo de vehículos
    * - Conteo de órdenes de trabajo
    * - Última visita (fecha de la última orden de trabajo)
    */
-  async findAll(): Promise<ClientResponseDto[]> {
+  async findAll(
+    offset: number = 0,
+    limit: number = 10,
+  ): Promise<PaginatedResponse<ClientResponseDto>> {
+
+    // Obtener el total de registros
+    const [totalResult] = await this.db
+      .select({ count: count() })
+      .from(clients);
+    const total = totalResult?.count ?? 0;
+
+    // Obtener los registros paginados
     const allClients = await this.db
       .select({
         id: clients.id,
@@ -60,10 +72,11 @@ export class ClientsRepository {
           WHERE work_orders.client_id = clients.id
         )`.as('last_visit_date'),
       })
-      .from(clients);
-    //TODO: falta agregar paginacion con offset y limit
+      .from(clients)
+      .limit(limit)
+      .offset(offset);
 
-    return allClients.map((client) => {
+    const data = allClients.map((client) => {
       // Formatear la última visita en formato YYYY-MM-DD
       let lastVisit: string | null = null;
       if (client.lastVisitDate) {
@@ -89,6 +102,13 @@ export class ClientsRepository {
         updatedAt: client.updatedAt ?? '',
       };
     });
+
+    return {
+      data,
+      total,
+      offset,
+      limit,
+    };
   }
 
   async findById(id: string): Promise<ClientResponseDto> {

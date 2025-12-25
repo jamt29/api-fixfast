@@ -7,12 +7,13 @@ import { Inject } from '@nestjs/common';
 import type { Database } from '../../db/database.module';
 import { DATABASE_CONNECTION } from '../../db/database.module';
 import { users, roles } from '../../db/schema';
-import { eq, and, or, not } from 'drizzle-orm';
+import { eq, and, or, not, count } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { generateId } from '../../common/utils/id-generator.util';
+import type { PaginatedResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class UsersService {
@@ -67,9 +68,22 @@ export class UsersService {
     return this.mapToUserResponse(newUser);
   }
 
-  async findAll(activeOnly?: boolean): Promise<UserResponseDto[]> {
+  async findAll(
+    offset: number = 0,
+    limit: number = 10,
+    activeOnly?: boolean,
+  ): Promise<PaginatedResponse<UserResponseDto>> {
     const conditions = activeOnly ? [eq(users.isActive, true)] : [];
 
+    // Obtener el total de registros
+    const [totalResult] = await this.db
+      .select({ count: count() })
+      .from(users)
+      .leftJoin(roles, eq(users.roleId, roles.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
+    const total = totalResult?.count ?? 0;
+
+    // Obtener los registros paginados
     const allUsers = await this.db
       .select({
         id: users.id,
@@ -91,9 +105,11 @@ export class UsersService {
       })
       .from(users)
       .leftJoin(roles, eq(users.roleId, roles.id))
-      .where(conditions.length > 0 ? and(...conditions) : undefined);
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .limit(limit)
+      .offset(offset);
 
-    return allUsers.map((user) => ({
+    const data = allUsers.map((user) => ({
       id: user.id,
       username: user.username,
       email: user.email,
@@ -113,6 +129,13 @@ export class UsersService {
       createdAt: user.createdAt || '',
       updatedAt: user.updatedAt || '',
     }));
+
+    return {
+      data,
+      total,
+      offset,
+      limit,
+    };
   }
 
   async findOne(id: string): Promise<UserResponseDto> {

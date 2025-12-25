@@ -2,14 +2,23 @@ import { Injectable } from '@nestjs/common';
 import { ClientsRepository } from './repositories/clients.repository';
 import { ClientResponseDto } from './dto/client-response.dto';
 import { CreateClientDto } from './dto/create.dto';
+import type { PaginatedResponse } from '../../common/dto/pagination.dto';
 
 @Injectable()
 export class ClientsService {
   constructor(private readonly clientsRepository: ClientsRepository) {}
 
-  async findAll(): Promise<ClientResponseDto[]> {
-    const clients = await this.clientsRepository.findAll();
-    return clients.map((client) => this.mapToClientResponse(client));
+  async findAll(
+    offset: number = 0,
+    limit: number = 10,
+  ): Promise<PaginatedResponse<ClientResponseDto>> {
+    const result = await this.clientsRepository.findAll(offset, limit);
+    return {
+      data: result.data.map((client) => this.mapToClientResponse(client)),
+      total: result.total,
+      offset: result.offset,
+      limit: result.limit,
+    };
   }
 
   async create(createClientDto: CreateClientDto): Promise<ClientResponseDto> {

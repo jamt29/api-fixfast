@@ -1,7 +1,13 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards, UsePipes } from '@nestjs/common';
 import { MechanicsService } from './mechanics.service';
 import { UserResponseDto } from '../users/dto/user-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import {
+  paginationQuerySchema,
+  type PaginationQueryDto,
+} from '../../common/dto/pagination.dto';
+import type { PaginatedResponse } from '../../common/dto/pagination.dto';
 
 @Controller('v1/mechanics')
 @UseGuards(JwtAuthGuard)
@@ -9,11 +15,18 @@ export class MechanicsController {
   constructor(private readonly mechanicsService: MechanicsService) {}
 
   /**
-   * Obtiene todos los mecánicos activos
+   * Obtiene todos los mecánicos activos (paginado)
    */
   @Get()
-  async findAll(): Promise<UserResponseDto[]> {
-    return this.mechanicsService.findAll();
+  @UsePipes(new ZodValidationPipe(paginationQuerySchema))
+  async findAll(
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<UserResponseDto>> {
+    // Convertir page a offset: offset = (page - 1) * limit
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const offset = (page - 1) * limit;
+    return this.mechanicsService.findAll(offset, limit);
   }
 
   /**

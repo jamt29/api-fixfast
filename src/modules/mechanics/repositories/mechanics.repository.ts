@@ -2,8 +2,9 @@ import { Injectable, Inject } from '@nestjs/common';
 import type { Database } from '../../../db/database.module';
 import { DATABASE_CONNECTION } from '../../../db/database.module';
 import { users, roles } from '../../../db/schema';
-import { eq, and, or, inArray, ilike } from 'drizzle-orm';
+import { eq, and, or, inArray, ilike, count } from 'drizzle-orm';
 import type { MechanicResponseDto } from '../dto/mechanic-response.dto';
+import type { PaginatedResponse } from '../../../common/dto/pagination.dto';
 
 /**
  * Repository para acceso a datos de mecánicos
@@ -14,9 +15,26 @@ export class MechanicsRepository {
   constructor(@Inject(DATABASE_CONNECTION) private readonly db: Database) {}
 
   /**
-   * Busca todos los mecánicos activos
+   * Busca todos los mecánicos activos (paginado)
    */
-  async findAllActive(): Promise<MechanicResponseDto[]> {
+  async findAllActive(
+    offset: number = 0,
+    limit: number = 10,
+  ): Promise<PaginatedResponse<MechanicResponseDto>> {
+    const whereCondition = and(
+      or(eq(roles.code, 'MECHANIC'), eq(roles.code, 'MECHANIC_CHIEF')),
+      eq(users.isActive, true),
+    );
+
+    // Obtener el total de registros
+    const [totalResult] = await this.db
+      .select({ count: count() })
+      .from(users)
+      .leftJoin(roles, eq(users.roleId, roles.id))
+      .where(whereCondition);
+    const total = totalResult?.count ?? 0;
+
+    // Obtener los registros paginados
     const mechanics = await this.db
       .select({
         id: users.id,
@@ -38,14 +56,16 @@ export class MechanicsRepository {
       })
       .from(users)
       .leftJoin(roles, eq(users.roleId, roles.id))
-      .where(
-        and(
-          or(eq(roles.code, 'MECHANIC'), eq(roles.code, 'MECHANIC_CHIEF')),
-          eq(users.isActive, true),
-        ),
-      );
+      .where(whereCondition)
+      .limit(limit)
+      .offset(offset);
 
-    return mechanics;
+    return {
+      data: mechanics,
+      total,
+      offset,
+      limit,
+    };
   }
 
   /**

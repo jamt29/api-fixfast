@@ -16,6 +16,11 @@ import { ClientResponseDto } from './dto/client-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ZodValidationPipe } from 'src/common/pipes/zod-validation.pipe';
 import { type CreateClientDto, createClientSchema } from './dto/create.dto';
+import {
+  paginationQuerySchema,
+  type PaginationQueryDto,
+} from '../../common/dto/pagination.dto';
+import type { PaginatedResponse } from '../../common/dto/pagination.dto';
 
 @Controller('v1/clients')
 @UseGuards(JwtAuthGuard)
@@ -23,8 +28,15 @@ export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
   @Get()
-  async findAll(): Promise<ClientResponseDto[]> {
-    return this.clientsService.findAll();
+  @UsePipes(new ZodValidationPipe(paginationQuerySchema))
+  async findAll(
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponse<ClientResponseDto>> {
+    // Convertir page a offset: offset = (page - 1) * limit
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const offset = (page - 1) * limit;
+    return this.clientsService.findAll(offset, limit);
   }
 
   @Post()

@@ -22,6 +22,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserData } from '../auth/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import {
+  paginationQuerySchema,
+  type PaginationQueryDto,
+} from '../../common/dto/pagination.dto';
+import type { PaginatedResponse } from '../../common/dto/pagination.dto';
 
 @Controller('v1/users')
 @UseGuards(JwtAuthGuard)
@@ -38,11 +43,17 @@ export class UsersController {
   }
 
   @Get()
+  @UsePipes(new ZodValidationPipe(paginationQuerySchema))
   async findAll(
+    @Query() query: PaginationQueryDto,
     @Query('activeOnly') activeOnly?: string,
-  ): Promise<UserResponseDto[]> {
+  ): Promise<PaginatedResponse<UserResponseDto>> {
     const activeOnlyBool = activeOnly === 'true';
-    return this.usersService.findAll(activeOnlyBool);
+    // Convertir page a offset: offset = (page - 1) * limit
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const offset = (page - 1) * limit;
+    return this.usersService.findAll(offset, limit, activeOnlyBool);
   }
 
   @Get('me')

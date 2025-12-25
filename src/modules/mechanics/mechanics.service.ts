@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { MechanicsRepository } from './repositories/mechanics.repository';
 import type { UserResponseDto } from '../users/dto/user-response.dto';
 import type { MechanicResponseDto } from './dto/mechanic-response.dto';
+import type { PaginatedResponse } from '../../common/dto/pagination.dto';
 
 /**
  * Service para lógica de negocio de mecánicos
@@ -12,19 +13,30 @@ export class MechanicsService {
   constructor(private readonly mechanicsRepository: MechanicsRepository) {}
 
   /**
-   * Obtiene todos los mecánicos activos
+   * Obtiene todos los mecánicos activos (paginado)
    */
-  async findAll(): Promise<UserResponseDto[]> {
-    const mechanics = await this.mechanicsRepository.findAllActive();
-    return mechanics.map((m) => this.mapToUserResponse(m));
+  async findAll(
+    offset: number = 0,
+    limit: number = 10,
+  ): Promise<PaginatedResponse<UserResponseDto>> {
+    const result = await this.mechanicsRepository.findAllActive(offset, limit);
+    return {
+      data: result.data.map((m) => this.mapToUserResponse(m)),
+      total: result.total,
+      offset: result.offset,
+      limit: result.limit,
+    };
   }
 
   /**
    * Busca mecánicos por término de búsqueda
+   * Nota: Este método no usa paginación, retorna todos los resultados de la búsqueda
    */
   async search(term: string): Promise<UserResponseDto[]> {
     if (!term || term.trim().length === 0) {
-      return this.findAll();
+      // Si no hay término, retornar todos (sin paginación para búsqueda)
+      const result = await this.findAll(0, 1000); // Límite alto para búsqueda
+      return result.data;
     }
 
     const mechanics = await this.mechanicsRepository.findBySearchTerm(term);
