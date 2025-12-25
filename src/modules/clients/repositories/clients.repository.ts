@@ -1,9 +1,16 @@
-import { Injectable, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import type { Database } from '../../../db/database.module';
 import { DATABASE_CONNECTION } from '../../../db/database.module';
 import { clients } from '../../../db/schema';
-import { sql } from 'drizzle-orm';
+import { and, or, eq, ilike, sql, count } from 'drizzle-orm';
 import { ClientResponseDto } from '../dto/client-response.dto';
+import { CreateClientDto } from '../dto/create.dto';
+import { generateId } from '../../../common/utils/id-generator.util';
 
 /**
  * Repository para acceso a datos de clientes
@@ -53,6 +60,7 @@ export class ClientsRepository {
         )`.as('last_visit_date'),
       })
       .from(clients);
+    //TODO: falta agregar paginacion con offset y limit
 
     return allClients.map((client) => {
       // Formatear la última visita en formato YYYY-MM-DD
@@ -80,5 +88,165 @@ export class ClientsRepository {
         updatedAt: client.updatedAt ?? '',
       };
     });
+  }
+
+  async findById(id: string): Promise<ClientResponseDto> {
+    const [client] = await this.db
+      .select({
+        id: clients.id,
+        firstName: clients.firstName,
+        lastName: clients.lastName,
+        phone: clients.phone,
+        email: clients.email,
+        address: clients.address,
+        dui: clients.dui,
+        isActive: clients.isActive,
+        createdAt: clients.createdAt,
+        updatedAt: clients.updatedAt,
+      })
+      .from(clients)
+      .where(eq(clients.id, id))
+      .limit(1);
+
+    if (!client) {
+      throw new NotFoundException(`Cliente con ID ${id} no encontrado`);
+    }
+
+    return {
+      id: client.id,
+      name: `${client.firstName} ${client.lastName}`,
+      phone: client.phone ?? '',
+      email: client.email ?? '',
+      address: client.address ?? '',
+      dui: client.dui ?? '',
+      isActive: client.isActive ?? false,
+      createdAt: client.createdAt ?? '',
+      updatedAt: client.updatedAt ?? '',
+    };
+  }
+
+  async create(client: CreateClientDto): Promise<ClientResponseDto> {
+    const [newClient] = await this.db
+      .insert(clients)
+      .values({
+        id: generateId(),
+        firstName: client.firstName,
+        lastName: client.lastName,
+        phone: client.phone,
+        email: client.email,
+        address: client.address,
+        dui: client.dui,
+        isActive: client.isActive ?? true,
+      })
+      .returning();
+
+    return {
+      id: newClient.id,
+      name: `${newClient.firstName} ${newClient.lastName}`,
+      phone: newClient.phone ?? '',
+      email: newClient.email ?? '',
+      address: newClient.address ?? '',
+      dui: newClient.dui ?? '',
+      isActive: newClient.isActive ?? false,
+      vehicles: 0,
+      orders: 0,
+      lastVisit: null,
+      createdAt: newClient.createdAt ?? '',
+      updatedAt: newClient.updatedAt ?? '',
+    };
+  }
+
+  async update(
+    id: string,
+    client: CreateClientDto,
+  ): Promise<ClientResponseDto> {
+    await this.findById(id);
+
+    const isDuiInUse = await this.db
+      .select()
+      .from(clients)
+      .where(eq(clients.dui, client.dui))
+      .limit(1);
+
+    if (isDuiInUse.length > 0) {
+      throw new ConflictException('El DUI ya está en uso'); //!Ver si se pasa a 400
+    }
+
+    const isEmailInUse = await this.db
+      .select()
+      .from(clients)
+      .where(eq(clients.email, client.email))
+      .limit(1);
+
+    if (isEmailInUse.length > 0) {
+      throw new ConflictException('El email ya está en uso'); //!Ver si se pasa a 400
+    }
+
+    await this.db
+      .update(clients)
+      .set({
+        ...client,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(clients.id, id));
+
+    const updatedClient = await this.findById(id);
+    return updatedClient;
+  }
+
+  async remove(id: string): Promise<void> {
+    await this.findById(id);
+    await this.db.delete(clients).where(eq(clients.id, id));
+  }
+
+  async findBySearchTerm(term: string): Promise<ClientResponseDto[]> {
+    const likeTerm = `%${term}%`;
+    const clientes = await this.db
+      .select({
+        id: clients.id,
+        firstName: clients.firstName,
+        lastName: clients.lastName,
+        phone: clients.phone,
+        email: clients.email,
+        address: clients.address,
+        dui: clients.dui,
+        isActive: clients.isActive,
+        createdAt: clients.createdAt,
+        updatedAt: clients.updatedAt,
+      })
+      .from(clients)
+      .where(
+        and(
+          or(
+            ilike(clients.firstName, likeTerm),
+            ilike(clients.lastName, likeTerm),
+            ilike(clients.email, likeTerm),
+          ),
+        ),
+      )
+      .limit(10);
+    return clientes.map((cliente) => {
+      return {
+        id: cliente.id,
+        name: `${cliente.firstName} ${cliente.lastName}`,
+        phone: cliente.phone ?? '',
+        email: cliente.email ?? '',
+        address: cliente.address ?? '',
+        dui: cliente.dui ?? '',
+        isActive: cliente.isActive ?? false,
+        createdAt: cliente.createdAt ?? '',
+        updatedAt: cliente.updatedAt ?? '',
+      };
+    });
+  }
+
+  async changeStatus(id: string, isActive: boolean): Promise<void> {
+    await this.db.update(clients).set({ isActive }).where(eq(clients.id, id));
+    return;
+  }
+
+  async count(): Promise<number> {
+    const result = await this.db.select({ count: count() }).from(clients);
+    return result[0]?.count ?? 0;
   }
 }

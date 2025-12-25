@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ClientsRepository } from './repositories/clients.repository';
 import { ClientResponseDto } from './dto/client-response.dto';
+import { CreateClientDto } from './dto/create.dto';
 
 @Injectable()
 export class ClientsService {
@@ -9,6 +10,42 @@ export class ClientsService {
   async findAll(): Promise<ClientResponseDto[]> {
     const clients = await this.clientsRepository.findAll();
     return clients.map((client) => this.mapToClientResponse(client));
+  }
+
+  async create(createClientDto: CreateClientDto): Promise<ClientResponseDto> {
+    const client = await this.clientsRepository.create(createClientDto);
+    return this.mapToClientResponse(client);
+  }
+
+  async update(
+    id: string,
+    updateClientDto: CreateClientDto,
+  ): Promise<ClientResponseDto> {
+    const client = await this.clientsRepository.update(id, updateClientDto);
+    return this.mapToClientResponse(client);
+  }
+
+  async changeStatus(id: string, isActive: boolean): Promise<void> {
+    await this.clientsRepository.changeStatus(id, isActive);
+    return;
+  }
+
+  async findById(id: string): Promise<ClientResponseDto> {
+    const client = await this.clientsRepository.findById(id);
+    return this.mapToClientResponse(client);
+  }
+
+  async findBySearchTerm(term: string): Promise<ClientResponseDto[]> {
+    const clients = await this.clientsRepository.findBySearchTerm(term);
+    return clients.map((client) => this.mapToClientResponse(client));
+  }
+
+  async count(): Promise<number> {
+    return await this.clientsRepository.count();
+  }
+  async remove(id: string): Promise<void> {
+    await this.clientsRepository.remove(id);
+    return;
   }
 
   private mapToClientResponse(client: ClientResponseDto): ClientResponseDto {
