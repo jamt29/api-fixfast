@@ -1,14 +1,8 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateUserDto } from './create-user.dto';
-import { IsOptional, IsBoolean, IsString } from 'class-validator';
+import { z } from '../../../common/i18n/zod-i18n.config';
+import { createUserSchema } from './create-user.dto';
 
-export class UpdateUserDto extends PartialType(CreateUserDto) {
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+export const updateUserSchema = createUserSchema.partial().extend({
+  isActive: z.boolean().optional(),
+});
 
-  @IsOptional()
-  @IsString()
-  roleId?: string;
-}
-
+export type UpdateUserDto = z.infer<typeof updateUserSchema>;

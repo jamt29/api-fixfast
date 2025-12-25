@@ -16,4 +16,3 @@ export class UserResponseDto {
   createdAt: string;
   updatedAt: string;
 }
-

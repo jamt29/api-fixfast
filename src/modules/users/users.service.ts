@@ -12,14 +12,13 @@ import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
-import { nanoid } from 'nanoid';
+import { generateId } from '../../common/utils/id-generator.util';
 
 @Injectable()
 export class UsersService {
   constructor(@Inject(DATABASE_CONNECTION) private readonly db: Database) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
-    // Verificar si el email o username ya existen
     const existingUser = await this.db
       .select()
       .from(users)
@@ -35,7 +34,6 @@ export class UsersService {
       throw new ConflictException('El email o username ya está en uso');
     }
 
-    // Verificar que el rol existe
     const role = await this.db
       .select()
       .from(roles)
@@ -46,17 +44,15 @@ export class UsersService {
       throw new NotFoundException('El rol especificado no existe');
     }
 
-    // Hash de la contraseña
     const hashedPassword: string = await bcrypt.hash(
       createUserDto.password,
       10,
     );
 
-    // Crear el usuario
     const [newUser] = (await this.db
       .insert(users)
       .values({
-        id: nanoid(21),
+        id: generateId(),
         username: createUserDto.username,
         email: createUserDto.email,
         password: hashedPassword,

@@ -8,18 +8,20 @@ import {
   Delete,
   Query,
   UseGuards,
+  UsePipes,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { createUserSchema, type CreateUserDto } from './dto/create-user.dto';
+import { updateUserSchema, type UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserData } from '../auth/decorators/current-user.decorator';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 
 @Controller('v1/users')
 @UseGuards(JwtAuthGuard)
@@ -30,6 +32,7 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles('ADMIN')
   @HttpCode(HttpStatus.CREATED)
+  @UsePipes(new ZodValidationPipe(createUserSchema))
   async create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
     return this.usersService.create(createUserDto);
   }
@@ -55,6 +58,7 @@ export class UsersController {
   }
 
   @Patch(':id')
+  @UsePipes(new ZodValidationPipe(updateUserSchema))
   async update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
